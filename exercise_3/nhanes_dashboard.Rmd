@@ -1,0 +1,63 @@
+---
+title: "NHANES Dashboard"
+author: "Anthony Dumais"
+date: "2026-09-30"
+output:
+  flexdashboard::flex_dashboard:
+    orientation: rows
+---
+
+```{r setup, include=FALSE}
+library(dplyr)
+library(rio)
+library(here)
+library(flexdashboard)
+
+nhanes_data <- import(here("data", "cleaned_NHANES.csv"))
+```
+
+## Sample overview {data-height=650}
+
+### Age distribution of NHANES participants
+
+```{r sample-plot, echo=FALSE, out.width="75%", fig.align="center"}
+knitr::include_graphics(here::here("figures", "ex2_age.png"))
+```
+
+## Key indicators {data-height=350}
+
+### Participants aged 21 or older
+
+```{r age-gauge}
+pct_21_plus <- round(100 * mean(nhanes_data$age >= 21, na.rm = TRUE), 1)
+
+gauge(
+  pct_21_plus,
+  min = 0,
+  max = 100,
+  symbol = "%",
+  sectors = gaugeSectors(
+    danger = c(0, 25),
+    warning = c(25, 50),
+    success = c(50, 100)
+  )
+)
+```
+
+### Average systolic blood pressure above 120 mm Hg
+
+```{r sbp-value-box}
+sbp_columns <- c("systolic_bp_1",
+                 "systolic_bp_2",
+                 "systolic_bp_3",
+                 "systolic_bp_4")
+
+nhanes_data$average_sbp <- rowMeans(nhanes_data[sbp_columns], na.rm = TRUE)
+nhanes_data$average_sbp[is.nan(nhanes_data$average_sbp)] <- NA_real_
+
+pct_above_120 <- round(100 * mean(nhanes_data$average_sbp > 120, na.rm = TRUE), 1)
+
+valueBox(paste0(pct_above_120, "%"),
+         caption = "Average systolic BP > 120 mm Hg",
+         color = "#D8EAF5")
+```
