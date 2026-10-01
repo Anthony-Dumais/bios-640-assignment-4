@@ -1,0 +1,162 @@
+---
+title: "NHANES Dataset Description"
+author: "Anthony Dumais"
+date: "2026-09-30"
+output: pdf_document
+bibliography: references.bib
+---
+
+```{r setup, include=FALSE}
+library(dplyr)
+library(rio)
+library(here)
+
+nhanes <- rio::import(here::here("data", "cleaned_NHANES.csv")) %>%
+  mutate(
+    wave = factor(
+      wave_id,
+      levels = c(2015, 2016, 2017),
+      labels = c("2013–2014", "2015–2016", "2017–2018")
+    )
+  )
+```
+
+# Introduction
+
+This report describes the unweighted characteristics of 29,400 participants from three cycles of the National Health and Nutrition Examination Survey (NHANES) [@nhanesdata]. The tables compare sample size, gender, ethnicity, and average systolic blood pressure across cycles.
+
+# Sample size and gender
+
+Table 1 shows the number of participants and the number and percentage of males in each survey cycle.
+
+```{r sample-gender-table, echo=FALSE}
+sample_summary <- nhanes %>%
+  group_by(wave) %>%
+  summarise(
+    total_n = n(),
+    male_n = sum(gender == "Male", na.rm = TRUE),
+    male_pct = 100 * male_n / total_n,
+    .groups = "drop"
+  )
+
+sample_summary %>%
+  mutate(
+    total_n = format(total_n, big.mark = ",", trim = TRUE),
+    male = sprintf(
+      "%s (%.1f%%)",
+      format(male_n, big.mark = ",", trim = TRUE),
+      male_pct
+    )
+  ) %>%
+  select(wave, total_n, male) %>%
+  knitr::kable(
+    format = "latex",
+    booktabs = TRUE,
+    col.names = c("Survey cycle", "Total, n", "Males, n (%)"),
+    caption = "Sample size and male participants by NHANES survey cycle"
+  ) %>%
+  kableExtra::kable_styling(latex_options = "hold_position") %>%
+  kableExtra::column_spec(1, bold = TRUE) %>%
+  kableExtra::footnote(
+    general = "Unweighted counts; percentages use all participants in each cycle.",
+    threeparttable = TRUE
+  )
+```
+
+Across the three cycles, the dataset contains `r format(nrow(nhanes), big.mark = ",")` participants. The percentage of males ranges from `r sprintf("%.1f", min(sample_summary$male_pct))`% to `r sprintf("%.1f", max(sample_summary$male_pct))`%.
+
+# Ethnicity
+
+Table 2 presents the number and percentage of participants in each ethnicity category, within each survey cycle.
+
+```{r ethnicity-table, echo=FALSE}
+ethnicity_summary <- nhanes %>%
+  count(wave, ethnicity_2, name = "n") %>%
+  group_by(wave) %>%
+  mutate(pct = 100 * n / sum(n)) %>%
+  ungroup()
+
+ethnicity_summary %>%
+  mutate(
+    entry = sprintf(
+      "%s (%.1f%%)",
+      format(n, big.mark = ",", trim = TRUE),
+      pct
+    )
+  ) %>%
+  select(ethnicity_2, wave, entry) %>%
+  tidyr::pivot_wider(names_from = wave, values_from = entry) %>%
+  knitr::kable(
+    format = "latex",
+    booktabs = TRUE,
+    col.names = c("Ethnicity", "2013–2014", "2015–2016", "2017–2018"),
+    caption = "Ethnicity of NHANES participants by survey cycle"
+  ) %>%
+  kableExtra::kable_styling(
+    latex_options = "HOLD_position",
+    font_size = 9
+  ) %>%
+  kableExtra::add_header_above(
+    c(" " = 1, "Survey cycle: n (%)" = 3)
+  ) %>%
+  kableExtra::column_spec(1, bold = TRUE) %>%
+  kableExtra::footnote(
+    general = "Unweighted counts; percentages are within each survey cycle."
+  )
+```
+The White category accounts for between `r sprintf("%.1f", min(ethnicity_summary$pct[ethnicity_summary$ethnicity_2 == "White"]))`% and `r sprintf("%.1f", max(ethnicity_summary$pct[ethnicity_summary$ethnicity_2 == "White"]))`% of participants across the three cycles.
+
+# Average systolic blood pressure
+
+Each participant’s average systolic blood pressure (SBP) is calculated from their available readings. Table 3 summarizes these averages by survey cycle.
+
+```{r sbp-table, echo=FALSE}
+sbp_columns <- paste0("systolic_bp_", 1:4)
+
+nhanes$average_sbp <- rowMeans(nhanes[sbp_columns], na.rm = TRUE)
+nhanes$average_sbp[is.nan(nhanes$average_sbp)] <- NA_real_
+
+sbp_summary <- nhanes %>%
+  group_by(wave) %>%
+  summarise(
+    measured_n = sum(!is.na(average_sbp)),
+    min_sbp = min(average_sbp, na.rm = TRUE),
+    max_sbp = max(average_sbp, na.rm = TRUE),
+    median_sbp = median(average_sbp, na.rm = TRUE),
+    mean_sbp = mean(average_sbp, na.rm = TRUE),
+    sd_sbp = sd(average_sbp, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+sbp_summary %>%
+  mutate(
+    measured_n = format(measured_n, big.mark = ",", trim = TRUE),
+    across(
+      c(min_sbp, max_sbp, median_sbp, mean_sbp, sd_sbp),
+      ~ sprintf("%.1f", .x)
+    )
+  ) %>%
+  knitr::kable(
+    format = "latex",
+    booktabs = TRUE,
+    col.names = c("Survey cycle", "n", "Minimum", "Maximum",
+                  "Median", "Mean", "SD"),
+    caption = "Average systolic blood pressure by NHANES survey cycle"
+  ) %>%
+  kableExtra::kable_styling(
+    latex_options = "HOLD_position",
+    font_size = 9
+  ) %>%
+  kableExtra::add_header_above(
+    c(" " = 2, "Average SBP (mm Hg)" = 5)
+  ) %>%
+  kableExtra::column_spec(1, bold = TRUE) %>%
+  kableExtra::footnote(
+    general = "n = participants with at least one SBP reading; SD = standard deviation. Statistics describe participants' average SBP.",
+    threeparttable = TRUE
+  )
+```
+
+Mean average SBP ranges from `r sprintf("%.1f", min(sbp_summary$mean_sbp))` to `r sprintf("%.1f", max(sbp_summary$mean_sbp))` mm Hg across the three cycles. Participants without any SBP readings are excluded from these summaries.
+
+# References
